@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install shellcheck (advisory)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y shellcheck
+      - name: Lint, hook smoke tests, leak scan
+        run: tools/check.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate the plugin and marketplace manifests
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude plugin validate . --strict

@@ -1,0 +1,14 @@
+{
+  "name": "mobile-drive",
+  "description": "The mobile-drive plugin: token-cheap Android and iOS app driving through the accessibility tree.",
+  "owner": { "name": "ikm2005" },
+  "plugins": [
+    {
+      "name": "mobile-drive",
+      "source": "./",
+      "description": "Drive Android and iOS apps through the accessibility tree, replay saved flows in one call, delegate walks to a cheap executor.",
+      "category": "testing",
+      "tags": ["mobile", "android", "ios", "automation"]
+    }
+  ]
+}

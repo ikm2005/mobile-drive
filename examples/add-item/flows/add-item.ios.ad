@@ -1,0 +1,20 @@
+# Illustrative flow for the fictional Items app (examples/add-item/app-facts.md). It shows the
+# hardened shape: a wait after every navigation, id selectors first, and an end state that only a
+# successful Save produces. It will not run against a real app.
+context platform=ios device="iPhone 17" kind=simulator theme=unknown
+open "com.example.Items" --relaunch
+wait "label=\"Items\"" 20000
+press "role=\"button\" label=\"Items\" || label=\"Items\""
+wait "id=\"item_add\"" 10000
+press "id=\"item_add\""
+wait "id=\"item_name\"" 10000
+fill "id=\"item_name\"" "Sample item"
+fill "id=\"item_quantity\"" 2
+press "id=\"item_category\" || label=\"Category\""
+wait "label=\"Groceries\"" 10000
+press "role=\"cell\" label=\"Groceries\" || label=\"Groceries\""
+wait "label=\"Save\"" 10000
+press "role=\"button\" label=\"Save\" || label=\"Save\""
+wait "id=\"item_add\"" 10000
+wait "label=\"Sample item\"" 10000
+close
