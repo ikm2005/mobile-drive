@@ -131,6 +131,10 @@ Never give up on a step only because the tree lacks it: move down this ladder.
 
 A screenshot is evidence, not verification: confirm named expectations with `wait`/`is`.
 
+**To check that a screen is right**, not just reach it, use the `mobile-drive:ui-check` skill. It
+covers matching a design, the safe area, clipping, overlap and tap size, and it doesn't need
+screenshots in your context.
+
 ## 4. Keep the main context clean: `mobile-drive:mobile-runner`
 
 Every call re-sends the caller's whole context at the caller's model price. A walk of more than

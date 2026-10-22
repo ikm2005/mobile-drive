@@ -2,8 +2,10 @@
 
 A Claude Code plugin that makes agents drive Android and iOS apps **cheaply**. They read the OS
 accessibility tree instead of screenshotting every step, replay known paths in one call, and hand
-long walks to a cheaper executor agent. It works on any installed app (emulator, simulator or
-device) and needs no app source.
+long walks to a cheaper executor agent. They can also **check** a screen against a design: every
+element in place, nothing under the notch or home indicator, nothing clipped, covered or too small
+to tap. A script does the geometry; only small crops reach a Haiku model. It works on any installed
+app (emulator, simulator or device) and needs no app source.
 
 It is a discipline layer on top of [agent-device](https://github.com/callstack/agent-device), the
 open-source CLI (MIT) that does the actual device work.
@@ -107,12 +109,53 @@ Updates arrive when `version` changes. Turn on auto-update under `/plugin` → M
    is saved as `.claude/mobile-drive/flows/<task>.<platform>.ad`, and later requests replay it in
    one call.
 
-[`examples/add-item/`](examples/add-item/) shows a filled-in `app-facts.md` and two hardened flows
-for a fictional app.
+[`examples/add-item/`](examples/add-item/) shows a filled-in `app-facts.md`, two hardened flows and a
+screen spec for a fictional app.
 
 If the app opens with a paywall or onboarding sheet whose dismiss button is not a plain "Close",
 tell the replay preflight how to close it, one selector per line:
 `export MOBILE_POPUP_SELECTORS=$'label="Skip"\nid="close_button"'`.
+
+## Checking screens (`mobile-drive:ui-check`)
+
+Ask "does the Items screen match iOS?" or "is anything under the notch on this screen?".
+Vision models are poor at open-ended spot-the-difference, so the skill splits the work into tiers:
+
+| Tier | Who | Does | Cost |
+|---|---|---|---|
+| 0 | `ui-audit.py` | Compares the accessibility tree's element frames with the screen spec and runs the rules for every screen | 0 tokens |
+| 1 | `mobile-runner` (Sonnet) | Reaches the screen (replay first) and runs tier 0 | as for any walk |
+| 2 | `ui-inspector` (Haiku, low effort) | One PASS/FAIL/UNSURE per small crop pair: icons, colours, and geometry failures worth a second look | ≈ 900 image tokens per crop |
+| 3 | your main model | Judges only the FAIL and UNSURE items | a few hundred tokens |
+
+**Checks:**
+- missing elements, wrong order, moved or resized elements;
+- content under the status bar, cutout, navigation bar, home indicator or keyboard;
+- elements off-screen, covered or overlapping;
+- tap targets under 48dp (Android) or 44pt (iOS);
+- truncated text;
+- icons whose pixels differ from the reference.
+
+Android insets are read live from `dumpsys window`. The iOS simulator doesn't report them, so they
+come from config.
+
+**What a screen is compared against** is set once by `/mobile-drive:init`:
+
+| `source` | Spec comes from |
+|---|---|
+| `reference-app` | The same screen on the other platform: `ui-audit.py capture` on, say, iOS, then `check` on Android |
+| `figma` | A Figma frame. `figma-spec.py` uses your own `FIGMA_TOKEN` (zero tokens), or the Figma MCP's `get_metadata` |
+| `baseline` | A screen you approved (`ui-audit.py approve`), plus a pixel diff on later runs |
+| `spec` | A spec you write by hand |
+
+With no spec, the rules that hold on every screen still run. Specs live in
+`.claude/mobile-drive/screens/` (commit them). Reports with screenshots go to `reports/`, which is
+git-ignored. The format is in
+[`skills/ui-check/spec-format.md`](skills/ui-check/spec-format.md).
+
+Contrast and Dynamic Type need test code, which this skill doesn't install. Use XCUITest
+`performAccessibilityAudit()` (iOS 17+) or Android's Accessibility Test Framework for those. For
+CI golden images, use Paparazzi, Roborazzi or swift-snapshot-testing.
 
 ## What's inside
 
@@ -120,6 +163,8 @@ tell the replay preflight how to close it, one selector per line:
 |---|---|
 | The method: cost model, replay first, the walk loop, screenshot fallback ladder, safety | skill `mobile-drive:drive` |
 | Sonnet executor that returns PASS/FAIL in ≤ 20 lines | agent `mobile-drive:mobile-runner` |
+| Screen checks against a design: geometry, safe area, clipping, tap size, eyes on crops | skill `mobile-drive:ui-check`, `scripts/ui-audit.py`, `scripts/figma-spec.py` |
+| Haiku crop inspector that answers PASS/FAIL/UNSURE per item | agent `mobile-drive:ui-inspector` |
 | One-call replay with stale-session cleanup and popup preflight | `scripts/replay.sh` |
 | Once-per-session reminder when an agent screenshots or pixel-taps first. It never blocks | `PostToolUse` hook |
 | Zero-token metrics collector | hooks on `PostToolUse`, `PostToolUseFailure`, `SubagentStop`, `SessionEnd` |
@@ -137,6 +182,7 @@ The metrics hook never prints anything, so it costs no tokens. Its data stays on
 - repeated taps and scroll loops;
 - batching and delegation;
 - runner reports;
+- screen-check verdicts and counts, and the inspector's PASS/FAIL/UNSURE counts;
 - per-session token totals;
 - taps on risky labels.
 
@@ -188,7 +234,7 @@ every hook runs twice and the metrics double-count.
 ## Development
 
 ```
-tools/check.sh                      # lint, hook smoke tests, leak scan
+tools/check.sh                      # lint, hook smoke tests, ui-audit tests, leak scan
 claude plugin validate . --strict
 claude --plugin-dir .               # try local changes without installing
 ```

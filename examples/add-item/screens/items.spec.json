@@ -1,0 +1,17 @@
+{
+ "screen": "items",
+ "source": "reference-app:ios",
+ "platform": "ios",
+ "captured": "2026-10-22",
+ "viewport": {"width": 390, "height": 844, "unit": "pt"},
+ "insets": {"top": 47, "bottom": 34, "left": 0, "right": 0},
+ "tolerance": 0.04,
+ "placement": "warn",
+ "elements": [
+  {"key": "items", "kind": "text", "label": "Items", "rect_norm": [0.041, 0.017, 0.5128, 0.0446], "required": true},
+  {"key": "item_add", "id": "item_add", "label": "Add", "kind": "button", "rect_norm": [0.8462, 0.0066, 0.1128, 0.0577], "required": true},
+  {"key": "item_icon", "id": "item_icon", "kind": "image", "visual": true, "crop": "screens/items/ref/item_icon.png", "rect_norm": [0.0513, 0.0826, 0.0923, 0.0472], "required": false},
+  {"key": "save", "label": "Save", "kind": "button", "rect_norm": [0.2564, 0.9345, 0.4872, 0.0577], "required": true}
+ ],
+ "map": {"item_add": {"android": {"label": "Add item"}}}
+}

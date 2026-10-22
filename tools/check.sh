@@ -57,7 +57,14 @@ grep -qs '"kind": *"runner"' "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl && ok "metrics 
 before="$(cat "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl | wc -l)"
 echo '{"hook_event_name":"SubagentStop","agent_type":"mobile-drive:mobile-runner","session_id":"check5","last_assistant_message":"PASS"}' | MOBILE_DRIVE_NO_METRICS=1 metrics
 [[ "$(cat "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl | wc -l)" == "$before" ]] && ok "metrics opt-out" || bad "metrics opt-out"
+audit_out='ui-audit items ios: FAIL — 1 fail, 0 warn, 0 for eyes (matched 5/6)\nFAIL missing    item_add: id=item_add not on screen'
+printf '{"hook_event_name":"PostToolUse","tool_name":"Bash","session_id":"check6","cwd":"/tmp/app","tool_input":{"command":"python3 scripts/ui-audit.py check items --platform ios"},"tool_response":{"stdout":"%s","stderr":""}}' "$audit_out" | metrics
+echo '{"hook_event_name":"SubagentStop","agent_type":"mobile-drive:ui-inspector","session_id":"check6","last_assistant_message":"item_icon: FAIL — different icon\nsave: PASS — fully visible"}' | metrics
+grep -qs '"kind": *"ui_audit".*"missing": *1' "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl && ok "metrics records screen checks" || bad "metrics ui_audit event"
+grep -qs '"kind": *"inspector".*"fail": *1' "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl && ok "metrics records inspector verdicts" || bad "metrics inspector event"
 python3 scripts/mobile-drive-stats.py --since 30 >/dev/null && ok "stats digest runs" || bad "stats digest"
+python3 tools/test_ui_audit.py | grep -v '^ok' | sed 's/^/      /'; [[ ${PIPESTATUS[0]} -eq 0 ]] && ok "ui-audit and figma-spec tests" || bad "ui-audit tests"
+for f in examples/*/screens/*.json tools/fixtures/*.json; do python3 -m json.tool "$f" >/dev/null && ok "json $f" || bad "json $f"; done
 
 # 3. Generic leak scan over tracked-or-new files (this script excluded: it holds the patterns)
 files=()

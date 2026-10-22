@@ -3,6 +3,26 @@
 All notable changes to this plugin. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/). Pre-1.0: the evidence comes from one app.
 
+## [0.2.0] — 2026-10-22
+
+### Added
+- Skill `mobile-drive:ui-check`, which checks that a screen is right, not just reachable:
+  - **against a spec:** missing elements, order, placement;
+  - **on every screen:** safe area (status bar, cutout, navigation bar, home indicator, keyboard),
+    off-screen, covered, overlapping, tap-target size, truncated text.
+- `scripts/ui-audit.py` (`check`, `capture`, `approve`, `audit`, `insets`): the tier-0 geometry
+  audit, written in the Python standard library only. It reads agent-device `snapshot --json`
+  frames and `dumpsys window` insets, and crops PNGs itself.
+- Agent `mobile-drive:ui-inspector`, on Haiku at low effort. It answers PASS/FAIL/UNSURE per crop
+  pair, so no full screenshot reaches a model.
+- Four design sources, chosen at `/mobile-drive:init` (`ui-check.json`): `reference-app`,
+  `figma`, `baseline` and `spec`.
+  - `scripts/figma-spec.py` imports a frame through the Figma REST API using your own
+    `FIGMA_TOKEN`.
+- Metrics and the retro digest record screen-check verdicts and inspector answers.
+- An example screen spec in `examples/add-item/screens/`, and synthetic tests in
+  `tools/test_ui_audit.py`.
+
 ## [0.1.0] — 2026-10-22
 
 ### Added

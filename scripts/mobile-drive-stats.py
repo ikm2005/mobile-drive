@@ -181,6 +181,29 @@ def digest(events, all_notes):
                 say(f"   · [{app}] {n[:150]}")
             act("review the pending runner notes; add the durable ones to app-facts.md")
 
+    # screen checks (ui-check)
+    audits = [e for e in events if e["kind"] == "ui_audit"]
+    if audits:
+        fails = sum(e["verdict"] == "FAIL" for e in audits)
+        checks = collections.Counter()
+        for e in audits:
+            checks.update(e.get("checks", {}))
+        eyes = sum(e.get("eyes", 0) for e in audits)
+        say(f"\nScreen checks: {len(audits)} runs, {fails} FAIL · findings: " +
+            (", ".join(f"{k} ×{v}" for k, v in checks.most_common(6)) or "none") + f" · {eyes} crop(s) sent for eyes")
+        insp = [e for e in events if e["kind"] == "inspector"]
+        if insp:
+            tot = collections.Counter()
+            for e in insp:
+                tot.update({k: e.get(k, 0) for k in ("pass", "fail", "unsure")})
+            say(f"  ui-inspector: {tot['pass']} PASS, {tot['fail']} FAIL, {tot['unsure']} UNSURE")
+            if sum(tot.values()) >= 10 and tot["unsure"] > 0.3 * sum(tot.values()):
+                act("ui-inspector answers UNSURE >30% of the time — crops may be too small; raise the crop "
+                    "padding or screenshot scale in ui-audit.py")
+        missing = checks.get("missing", 0)
+        if missing and missing >= len(audits):
+            act("'missing' fires on most screen checks — add `map` entries to the specs or ids/test tags in the app")
+
     # risky
     risky = collections.Counter(e.get("label") for e in events if e.get("risky"))
     if risky:

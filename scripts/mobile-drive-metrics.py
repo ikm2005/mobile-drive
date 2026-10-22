@@ -7,10 +7,12 @@ nothing reaches the model's context. It appends one JSON line per mobile event t
 Registered for: PostToolUse + PostToolUseFailure (Bash), SubagentStop, SessionEnd.
 
 Recorded: command verbs, selector *kinds*, labels of elements acted on, flow names, replay
-outcomes, fallbacks, runner reports, and per-session token totals read from the transcript.
+outcomes, fallbacks, runner reports, screen-check verdicts and counts, inspector PASS/FAIL/UNSURE
+counts, and per-session token totals read from the transcript.
 Never recorded: typed text (fill values), screenshots, snapshots, anything not mobile-related.
 Any error inside this hook is swallowed — metrics must never break a session.
 """
+import collections
 import glob
 import json
 import os
@@ -21,7 +23,9 @@ import time
 
 DIR = os.path.expanduser(os.environ.get("MOBILE_DRIVE_METRICS_DIR", "~/.claude/mobile-drive/metrics"))
 KEEP_MONTHS = 6
-MOBILE = re.compile(r"agent-device|replay\.sh|\badb\b|\bsimctl\b|\bidb\b|\baxe\b")
+MOBILE = re.compile(r"agent-device|replay\.sh|ui-audit\.py|\badb\b|\bsimctl\b|\bidb\b|\baxe\b")
+AUDIT = re.compile(r"^ui-audit (\S+) (\w+): (PASS|FAIL) — (\d+) fail, (\d+) warn, (\d+) for eyes \(matched (\d+)/(\d+)\)",
+                   re.M)
 RAW_FALLBACK = [
     (re.compile(r"\badb\b[^|;&]*\b(exec-out|shell)\s+(\S+\s+)*screencap\b"), "raw_screenshot"),
     (re.compile(r"\buiautomator\s+dump\b"), "raw_tree_dump"),
@@ -126,6 +130,14 @@ def on_bash(data):
                    "error": None if step else (re.search(r"Error \((\w+)\)", out) or [None, None])[1]},
                   session)
 
+    if "ui-audit.py" in cmd:
+        m = AUDIT.search(out)
+        if m:  # screen check: verdict and counts only, never the findings' text
+            checks = collections.Counter(re.findall(r"^(?:FAIL|WARN) (\S+)", out, re.M))
+            write({**base, "kind": "ui_audit", "screen": m.group(1), "platform": m.group(2), "verdict": m.group(3),
+                   "fail": int(m.group(4)), "warn": int(m.group(5)), "eyes": int(m.group(6)),
+                   "matched": int(m.group(7)), "spec_elements": int(m.group(8)), "checks": dict(checks)}, session)
+
     for seg in segments:
         for pattern, kind in RAW_FALLBACK:
             if pattern.search(seg):
@@ -163,6 +175,12 @@ def is_repeat(session, agent, ev):
 
 def on_subagent_stop(data):
     agent = data.get("agent_type") or ""
+    if agent == "ui-inspector" or agent.endswith(":ui-inspector"):
+        verdicts = collections.Counter(re.findall(r"^\S+?: (PASS|FAIL|UNSURE)\b", data.get("last_assistant_message") or "",
+                                                  re.M))
+        write({"kind": "inspector", "agent": "ui-inspector", **{k.lower(): v for k, v in verdicts.items()}},
+              data.get("session_id") or "unknown")
+        return
     if agent != "mobile-runner" and not agent.endswith(":mobile-runner"):  # plugin agents are namespaced
         return
     msg = data.get("last_assistant_message") or ""
