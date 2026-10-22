@@ -78,8 +78,23 @@ Prerequisites: [nvm](https://github.com/nvm-sh/nvm); Android SDK platform-tools 
 emulator or a USB-debugging device; and/or Xcode with a simulator. The first iOS command of the day
 builds an XCTest runner, which takes a few minutes and costs no tokens.
 
-While the repository is private, your machine needs git access to it: a GitHub SSH key, or
-`gh auth login && gh auth setup-git`. Without an SSH key, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`.
+No GitHub account is needed. On a machine with no GitHub SSH key, set
+`CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` first; without it, an install from `/plugin` tries SSH and fails.
+
+**For a team:** add this to a shared repo's `.claude/settings.json`. Everyone who opens that repo
+in Claude Code and trusts the folder gets the plugin enabled.
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "mobile-drive": { "source": { "source": "github", "repo": "ikm2005/mobile-drive" } }
+  },
+  "enabledPlugins": { "mobile-drive@mobile-drive": true }
+}
+```
+
+Updates arrive when `version` changes. Turn on auto-update under `/plugin` → Marketplaces, or run
+`/plugin marketplace update mobile-drive`.
 
 ## First use
 
