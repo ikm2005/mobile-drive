@@ -179,3 +179,7 @@ claude --plugin-dir .               # try local changes without installing
 ```
 
 MIT licensed.
+
+## Screenshot loop vs accessibility tree
+
+![The same add-an-item task done two ways. Screenshot loop: 4 screenshots (about 13,200 image tokens) and 7 calls, including a missed coordinate tap and a retry. Accessibility tree: no screenshots, about 600 text tokens across 3 calls, with the form steps chained into one call; next time a saved flow replays in a single call.](docs/screenshot-vs-tree.svg)
