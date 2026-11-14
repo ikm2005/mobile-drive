@@ -45,6 +45,40 @@ def pct(a, b):
     return f"{100 * a / b:.0f}%" if b else "–"
 
 
+ACTION_VERBS = ("press", "fill", "click", "tap", "scroll", "swipe", "type", "longpress", "long-press")
+NOT_TREE = ("version", "help", "devices", "doctor")  # agent-device commands that never read or act on a screen
+
+
+def tree_commands(evs):
+    return sum(1 for e in evs if e["kind"] == "ad" and e.get("verb") not in NOT_TREE)
+
+
+def raw_fallbacks(evs):
+    return sum(1 for e in evs if e["kind"] == "fallback" and str(e.get("type", "")).startswith("raw"))
+
+
+def session_kind(evs):
+    """One kind per session, used both for the session mix and for the token groups."""
+    main_actions = sum(1 for e in evs if e["kind"] == "ad" and e.get("agent") == "main" and e.get("verb") in ACTION_VERBS)
+    any_actions = any(e["kind"] == "ad" and e.get("verb") in ACTION_VERBS for e in evs)
+    replays = [e for e in evs if e["kind"] == "replay" or (e["kind"] == "ad" and e.get("verb") == "replay")]
+    if replays and all(r.get("outcome") == "PASS" for r in replays) and main_actions <= 3:
+        return "replay (clean)"
+    if replays:
+        return "replay + hand repair"
+    if any(e["kind"] == "runner" for e in evs) or (any_actions and not main_actions):
+        return "walk, delegated"
+    if main_actions:
+        return "walk, main session"
+    if raw_fallbacks(evs) and not tree_commands(evs):
+        return "raw loop (no tree)"
+    if tree_commands(evs):
+        return "look only"
+    if any(e["kind"] in ("ui_audit", "inspector") for e in evs):
+        return "screen check"
+    return "other"
+
+
 def digest(events, all_notes):
     by_session = collections.defaultdict(list)
     for e in events:
@@ -60,28 +94,26 @@ def digest(events, all_notes):
 
     # sessions: what kind of task, delegated or not, which app
     kinds = collections.Counter()
-    misses, app_of = 0, {}
+    misses, no_skill, app_of, kind_of = 0, 0, {}, {}
     for sid, evs in by_session.items():
         apps = [e["app"] for e in evs if e.get("verb") == "open" and e.get("app")]
-        app_of[sid] = apps[-1] if apps else (next((e.get("repo") for e in evs if e.get("repo")), "?"))
-        main_actions = sum(1 for e in evs if e["kind"] == "ad" and e["agent"] == "main" and e.get("verb") in
-                           ("press", "fill", "click", "scroll", "swipe", "type", "longpress"))
-        replays = [e for e in evs if e["kind"] == "replay"]
-        runner = any(e["kind"] == "runner" for e in evs)
-        if replays and all(r["outcome"] == "PASS" for r in replays) and main_actions <= 3:
-            kinds["replay (clean)"] += 1
-        elif replays:
-            kinds["replay + hand repair"] += 1
-        elif runner:
-            kinds["walk, delegated"] += 1
-        elif main_actions:
-            kinds["walk, main session"] += 1
-            misses += main_actions > 5
+        folder = next((e.get("repo") for e in evs if e.get("repo")), None)
+        app_of[sid] = apps[-1] if apps else (f"(folder) {folder}" if folder else "?")
+        kind_of[sid] = kind = session_kind(evs)
+        kinds[kind] += 1
+        if kind == "walk, main session":
+            misses += sum(1 for e in evs if e["kind"] == "ad" and e.get("agent") == "main" and
+                          e.get("verb") in ACTION_VERBS) > 5
+        if raw_fallbacks(evs) >= 4 and not tree_commands(evs):
+            no_skill += 1
     say(f"Sessions with device activity: {len(by_session)}  ·  " +
         "  ·  ".join(f"{k}: {v}" for k, v in kinds.most_common()))
     if misses:
         act(f"{misses} walk(s) of >5 steps ran in the main session instead of `mobile-drive:mobile-runner` — "
             "strengthen the delegation line in CLAUDE.md / SKILL.md")
+    if no_skill:
+        act(f"the skill did not load in {no_skill} session(s) (4+ raw screenshots/taps, no agent-device tree "
+            "command) — check the nudge and the routing rule")
 
     # replays
     flows = collections.defaultdict(lambda: {"runs": 0, "pass": 0, "steps": collections.Counter(),
@@ -216,31 +248,47 @@ def digest(events, all_notes):
     if os.path.exists(pf):
         prices = json.load(open(pf))
     sess = [e for e in events if e["kind"] == "session"]
+
+    def cost(by_model):
+        return sum(m["input"] / 1e6 * prices.get(k, {}).get("input", 0) +
+                   m["output"] / 1e6 * prices.get(k, {}).get("output", 0) for k, m in by_model.items())
+
     if sess:
-        say("\nTokens per session (median · peak context · turns)")
+        # device work only (mobile_*); sessions recorded before that split show whole-session totals, apart
+        device = [e for e in sess if "mobile_by_model" in e]
+        older = [e for e in sess if "mobile_by_model" not in e]
         groups = collections.defaultdict(list)
-        for e in sess:
-            evs = by_session[e["session"]]
-            kind = ("replay" if any(x["kind"] == "replay" for x in evs) else
-                    "walk (delegated)" if any(x["kind"] == "runner" for x in evs) else "walk (main)")
-            groups[kind].append(e)
+        for e in device:
+            groups[kind_of.get(e["session"], "other")].append(e)
+        if device:
+            say("\nTokens per session, device work only (median · device API calls · peak context)")
         for kind, es in sorted(groups.items()):
-            totals = [sum(m["input"] for m in e["by_model"].values()) for e in es]
-            cost = [sum(m["input"] / 1e6 * prices.get(k, {}).get("input", 0) +
-                        m["output"] / 1e6 * prices.get(k, {}).get("output", 0)
-                        for k, m in e["by_model"].items()) for e in es]
-            say(f"  {kind}: n={len(es)}, input {statistics.median(totals):,.0f} tok, "
-                f"peak {statistics.median(e['peak_context'] for e in es):,.0f}, "
-                f"turns {statistics.median(e['turns'] for e in es):.0f}"
-                + (f", ≈${statistics.median(cost):.2f}" if prices else ""))
-        if len(sess) >= 6:
-            half = len(sess) // 2
-            ordered = sorted(sess, key=lambda e: e["ts"])
-            a = statistics.median(sum(m["input"] for m in e["by_model"].values()) for e in ordered[:half])
-            b = statistics.median(sum(m["input"] for m in e["by_model"].values()) for e in ordered[half:])
-            say(f"  trend: median input {a:,.0f} → {b:,.0f} tok (older half → newer half)")
+            say(f"  {kind}: n={len(es)}, input {statistics.median(e['mobile_input'] for e in es):,.0f} tok, "
+                f"output {statistics.median(e['mobile_output'] for e in es):,.0f}, "
+                f"calls {statistics.median(e['mobile_calls'] for e in es):.0f}, "
+                f"peak {statistics.median(e['peak_context'] for e in es):,.0f}"
+                + (f", ≈${statistics.median(cost(e['mobile_by_model']) for e in es):.2f}" if prices else ""))
+        if len(device) >= 6:  # older whole-session rows are not comparable, so they stay out of the trend
+            half = len(device) // 2
+            ordered = sorted(device, key=lambda e: e["ts"])
+            a = statistics.median(e["mobile_input"] for e in ordered[:half])
+            b = statistics.median(e["mobile_input"] for e in ordered[half:])
+            say(f"  trend: median device input {a:,.0f} → {b:,.0f} tok (older half → newer half)")
             if b > a * 1.25:
-                act("token use per session rose >25% — check what changed (plugin/agent-device upgrade, app release)")
+                act("device-work token use per session rose >25% — check what changed "
+                    "(plugin/agent-device upgrade, app release)")
+        if older:
+            old_groups = collections.defaultdict(list)
+            for e in older:
+                old_groups[kind_of.get(e["session"], "other")].append(e)
+            say("\nTokens per session, whole session (older data, before the device-only split; "
+                "median · peak context · turns)")
+            for kind, es in sorted(old_groups.items()):
+                say(f"  {kind}, whole session (older data): n={len(es)}, input "
+                    f"{statistics.median(sum(m['input'] for m in e['by_model'].values()) for e in es):,.0f} tok, "
+                    f"peak {statistics.median(e['peak_context'] for e in es):,.0f}, "
+                    f"turns {statistics.median(e['turns'] for e in es):.0f}"
+                    + (f", ≈${statistics.median(cost(e['by_model']) for e in es):.2f}" if prices else ""))
 
     errlog = os.path.join(DIR, "errors.log")
     if os.path.exists(errlog):

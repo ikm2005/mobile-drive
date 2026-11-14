@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Repository checks, run by CI and before every push.
 #
-#   tools/check.sh                    lint, hook smoke tests, generic leak scan
+#   tools/check.sh                    lint, hook smoke tests, unit tests + coverage floor, leak scan
 #   tools/check.sh --terms <file>     also fail on any term in <file> (one per line, case-insensitive).
 #                                     Keep that file out of git (.terms.local is ignored): a committed
 #                                     denylist would publish the very names it guards against.
@@ -35,7 +35,9 @@ for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json hooks/hooks.
 done
 for f in scripts/*.sh scripts/*.py; do [[ -x "$f" ]] && ok "executable $f" || bad "not executable: $f"; done
 if command -v shellcheck >/dev/null; then
-  shellcheck -S warning scripts/*.sh tools/*.sh && ok "shellcheck" || echo "warn  shellcheck reported issues (advisory)"
+  shellcheck -S warning scripts/*.sh tools/*.sh && ok "shellcheck" || bad "shellcheck"
+else
+  echo "warn  shellcheck not installed (CI runs it)"
 fi
 
 # 2. Hook smoke tests, in a throwaway temp dir
@@ -63,7 +65,11 @@ echo '{"hook_event_name":"SubagentStop","agent_type":"mobile-drive:ui-inspector"
 grep -qs '"kind": *"ui_audit".*"missing": *1' "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl && ok "metrics records screen checks" || bad "metrics ui_audit event"
 grep -qs '"kind": *"inspector".*"fail": *1' "$MOBILE_DRIVE_METRICS_DIR"/*.jsonl && ok "metrics records inspector verdicts" || bad "metrics inspector event"
 python3 scripts/mobile-drive-stats.py --since 30 >/dev/null && ok "stats digest runs" || bad "stats digest"
-python3 tools/test_ui_audit.py | grep -v '^ok' | sed 's/^/      /'; [[ ${PIPESTATUS[0]} -eq 0 ]] && ok "ui-audit and figma-spec tests" || bad "ui-audit tests"
+# Unit tests (tools/test_*.py, run in-process by the coverage runner) and the line-coverage floor
+COVERAGE_MIN=85
+python3 tools/cov.py --min "$COVERAGE_MIN" | sed 's/^/      /'; [[ ${PIPESTATUS[0]} -eq 0 ]] \
+  && ok "unit tests pass, line coverage of scripts/*.py >= ${COVERAGE_MIN}%" || bad "unit tests or coverage floor (${COVERAGE_MIN}%)"
+bash tools/test_replay.sh | grep -v '^ok' | sed 's/^/      /'; [[ ${PIPESTATUS[0]} -eq 0 ]] && ok "replay.sh scenario tests" || bad "replay.sh tests"
 for f in examples/*/screens/*.json tools/fixtures/*.json; do python3 -m json.tool "$f" >/dev/null && ok "json $f" || bad "json $f"; done
 
 # 3. Generic leak scan over tracked-or-new files (this script excluded: it holds the patterns)

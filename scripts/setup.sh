@@ -28,6 +28,8 @@ NODE_BIN="$(dirname "$(nvm which "$NODE_MAJOR")")"
 
 if [ "$("$NODE_BIN/agent-device" --version 2>/dev/null || true)" != "$AGENT_DEVICE_VERSION" ]; then
   PATH="$NODE_BIN:$PATH" npm install -g "agent-device@${AGENT_DEVICE_VERSION}"
+  # A daemon left running by the previous version refuses the new client ("cannot serve this client").
+  PATH="$NODE_BIN:$PATH" "$NODE_BIN/agent-device" daemon stop >/dev/null 2>&1 || true
 fi
 
 mkdir -p "$SHIM_DIR"

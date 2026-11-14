@@ -1,6 +1,6 @@
 {
   "name": "mobile-drive",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Token-cheap mobile app driving for Claude Code: the accessibility tree instead of screenshots, one-call flow replay, a Sonnet executor agent, screen checks against a design (geometry by script, crops to a Haiku inspector), and zero-token metrics for a monthly retrospective. Built on agent-device.",
   "author": { "name": "ikm2005" },
   "repository": "https://github.com/ikm2005/mobile-drive",

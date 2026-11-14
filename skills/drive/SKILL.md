@@ -76,6 +76,9 @@ spend calls re-proving it.
   start over. To fix the flow itself, heal with `replay <flow> --save-script` and leave the
   `.healed.ad` for review. Never overwrite the original. Hardening checklist:
   `${CLAUDE_PLUGIN_ROOT}/skills/drive/flows-guide.md`.
+- `DIVERGED … timed out` → the replay hit its time limit and no step is named. The steps before the
+  limit have run, and a flow that creates data may already have created it. Take one snapshot and
+  check the data before repeating anything. For a long flow, set `MOBILE_REPLAY_TIMEOUT_MS`.
 
 ## 2. Walk it (no matching flow)
 

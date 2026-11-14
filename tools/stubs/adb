@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Fake adb for the tests (only `adb [-s S] shell dumpsys window`). Put tools/stubs first on PATH.
+#   STUB_DUMPSYS=<file>   what `shell dumpsys window` prints
+#   STUB_ADB_FAIL=1       the call fails as with no device attached
+[[ -n "${STUB_LOG:-}" ]] && printf 'adb %s\n' "$*" >> "$STUB_LOG"
+if [[ -n "${STUB_ADB_FAIL:-}" || ! -f "${STUB_DUMPSYS:-}" ]]; then
+  echo "adb: no devices/emulators found" >&2; exit 1
+fi
+cat "$STUB_DUMPSYS"

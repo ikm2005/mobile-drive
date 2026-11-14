@@ -539,6 +539,8 @@ def audit(spec, snap, insets, cfg, image=None, out_dir=None, baseline_png=None, 
                              f"hidden, cut off or overlapped in the image?", "ref": None, "rect": f["rect"],
                              "finding": f})
     eyes_out = []
+    if image and crops:  # the whole-screen crop can be the first one written
+        os.makedirs(crops, exist_ok=True)
     for e in eyes[:cfg["max_crops"]]:
         cur = None
         if image and crops:

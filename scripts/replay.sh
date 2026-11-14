@@ -8,8 +8,10 @@
 # 2. preflight: relaunches the app, waits until the screen is stable, and dismisses launch popups
 #    (system alert, plus any button in $MOBILE_POPUP_SELECTORS — default a "Close" button), which
 #    otherwise break a replay at a random step;
-# 3. replays the flow attached to the running app (its first `open … --relaunch` loses --relaunch).
-# Exit 0 = PASS, 1 = divergence (report printed; repair per `agent-device help scripting`), 2 = usage.
+# 3. replays the flow attached to the running app (its first `open … --relaunch` loses --relaunch),
+#    with a time limit of $MOBILE_REPLAY_TIMEOUT_MS (default 300000 ms).
+# Exit 0 = PASS, 1 = divergence or timeout (report printed; repair per `agent-device help scripting`),
+# 2 = usage.
 # Never edits the .ad file. A flow that creates data creates it again on every replay.
 set -uo pipefail
 
@@ -53,13 +55,24 @@ if [[ -n "$app" ]]; then
   agent-device close --platform "$platform" >/dev/null 2>&1 || true
 fi
 
-attached="$(mktemp -d)/$(basename "$flow")"
+tmpdir="$(mktemp -d)"; trap 'rm -rf "$tmpdir"' EXIT
+attached="$tmpdir/$(basename "$flow")"
 awk '!done && /^open "/ { sub(/ --relaunch/, ""); done = 1 } { print }' "$flow" > "$attached"
 
-out=$(agent-device replay "$attached" "${target[@]}" 2>&1); rc=$?
+# agent-device gives a whole replay 90 s unless told otherwise; a 30-step flow on a slow emulator
+# needs more. Set MOBILE_REPLAY_TIMEOUT_MS per project for longer flows.
+timeout_ms="${MOBILE_REPLAY_TIMEOUT_MS:-300000}"
+out=$(agent-device replay "$attached" --timeout "$timeout_ms" "${target[@]}" 2>&1); rc=$?
 note="$(grep -cvE '^(#|context|[[:space:]]*$)' "$flow") steps${dismissed:+, dismissed $dismissed first}"
 if [[ $rc -eq 0 ]]; then
   echo "PASS replay $(basename "$flow") ($note)"; exit 0
+fi
+if grep -q 'Daemon request timed out' <<<"$out"; then
+  # No step is named, and the steps before the cut-off have already run.
+  echo "DIVERGED replay $(basename "$flow") ($note) — timed out after $((timeout_ms / 1000)) s, no step named." \
+       "The steps so far have run: check the screen and the data before repeating any of them" \
+       "(a flow that creates data may already have created it). MOBILE_REPLAY_TIMEOUT_MS raises the limit."
+  exit 1
 fi
 echo "DIVERGED replay $(basename "$flow") ($note) — the report below names the step; finish it by hand:"
 grep -vE '^(Diagnostic ID|Diagnostics Log):' <<<"$out" | head -30

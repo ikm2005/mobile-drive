@@ -1,0 +1,7 @@
+Replay failed at step 3 (press 'label="Save"'): no element matches label="Save" on the current screen
+  screen: Items (digest 4f1c9a2e)
+  suggestions: id="item_save" (0.92), role="button" label="Done" (0.41)
+  repairHint: record-and-heal
+  resume: replay --from 3 --plan-digest 0123456789abcdef
+Diagnostic ID: 00000000-0000-0000-0000-000000000000
+Diagnostics Log: ./agent-device/diagnostics/replay.log

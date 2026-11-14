@@ -29,26 +29,43 @@ loop. The plugin attacks all three factors:
 
 ## Measured
 
-Measured on a production app, add-a-record task, Opus, **n = 2 per row**.
+One production app, one add-a-record task of about 20 UI steps, Opus 5.5 in the main session,
+plugin 0.2.1 on agent-device 0.21.22. **n = 5 per row** (8 for the iOS walk). Each cell is the
+median cost of one run, its range, and the change against the baseline.
 
-| Condition | Android cost | iOS cost |
+| Condition | Android | iOS |
 |---|---|---|
-| Baseline (screenshot/adb loop) | $1.92 | $1.57 |
-| Skill only (round 1) | $1.17 (−39%) | $1.38 (−12%) |
-| Walk via `mobile-runner` | $0.87 (−54%) | $0.82 (−48%)² |
-| Replay | $0.83 (−57%)¹ | $0.32 (−80%)³ |
+| Baseline: no plugin, no saved flow | $1.13 (0.91–1.20) | $1.19 (0.82–1.95) |
+| Skill only: the main model walks | $0.71 (0.54–0.83), −37% | $0.67 (0.64–0.90), −44% |
+| Walk handed to `mobile-runner` | $0.49 (0.47–0.58), −56% | $0.51 (0.46–1.11), −57% |
+| Replay of a saved flow | $0.19 (0.19–0.46), −83%¹ | $0.21 (0.18–0.66), −82% |
 
-¹ Hand-finished after the flow diverged at a form field with no label or id.
-² The main model delegated to the runner in 1 of the 2 runs.
-³ The clean run. The 2-run mean was $0.72 (−54%): the other run hit a launch popup, which
-`replay.sh` now clears before replaying.
+The other medians, Android / iOS:
 
-Peak main-session context fell from about 120k to about 67k tokens. Every run's result was
-checked independently of the agent's claim.
+| Condition | Result confirmed² | Screenshots | Peak main-session context | Wall time |
+|---|---|---|---|---|
+| Baseline | 4 of 5 / 4 of 5 | 4 / 5 | 87k / 93k | 372 s / 287 s |
+| Skill only | 5 of 5 / 5 of 5 | 3 / 1 | 69k / 72k | 262 s / 123 s |
+| Walk handed to `mobile-runner` | 5 of 5 / 7 of 8 | 3 / 0 | 54k / 54k | 336 s / 175 s |
+| Replay | 5 of 5 / 5 of 5 | 0 / 0 | 51k / 51k | 157 s / 71 s |
 
-**Read these numbers with care.** n = 2, one app, one task. They were measured with the earlier
-copy-installed version of this kit plus a `CLAUDE.md` routing line; the plugin packaging has not
-been re-benchmarked.
+- **Delegation.** Whenever the `Agent` tool was available, the main model handed the walk to
+  `mobile-runner`: 13 of 13 runs. Three of them are iOS runs made before the harness could withhold
+  the tool; they count as walks, which is why that row has 8. Handing over is cheaper than walking
+  in the main session, and slower.
+- **Replay.** All 10 replays passed in one `replay.sh` call. The dearest ones started with a cold
+  prompt cache, or the agent re-checked the result afterwards.
+- **Baseline.** It costs less than the $1.57 to $1.92 measured in October with n = 2, so the
+  savings above are smaller than the ones this page used to show for the walks.
+
+¹ Measured after the replay time limit was raised (0.2.1). With agent-device's own 90 s limit all
+five Android replays were cut off after they had saved the record, and cost $0.53 (0.38–0.68).
+These five runs were made after the other rows, not interleaved with them.
+² Checked independently of the agent's claim: exactly one new record with the right related item.
+The misses: one baseline gave up, one baseline left two new rows, one walk left none.
+
+**Read these numbers with care.** One app, one task, one machine, five runs per row. Method:
+[tools/bench-method.md](tools/bench-method.md).
 
 ## How it compares
 
@@ -166,7 +183,7 @@ CI golden images, use Paparazzi, Roborazzi or swift-snapshot-testing.
 | Screen checks against a design: geometry, safe area, clipping, tap size, eyes on crops | skill `mobile-drive:ui-check`, `scripts/ui-audit.py`, `scripts/figma-spec.py` |
 | Haiku crop inspector that answers PASS/FAIL/UNSURE per item | agent `mobile-drive:ui-inspector` |
 | One-call replay with stale-session cleanup and popup preflight | `scripts/replay.sh` |
-| Once-per-session reminder when an agent screenshots or pixel-taps first. It never blocks | `PostToolUse` hook |
+| Reminder when an agent screenshots or pixel-taps instead of reading the tree: at the 1st, 4th and 12th raw call of a session. It names the skill and the runner, and never blocks | `PostToolUse` hook |
 | Zero-token metrics collector | hooks on `PostToolUse`, `PostToolUseFailure`, `SubagentStop`, `SessionEnd` |
 | Machine setup, project setup, monthly retrospective | `/mobile-drive:setup`, `/mobile-drive:init`, `/mobile-drive:retro` |
 
@@ -183,7 +200,9 @@ The metrics hook never prints anything, so it costs no tokens. Its data stays on
 - batching and delegation;
 - runner reports;
 - screen-check verdicts and counts, and the inspector's PASS/FAIL/UNSURE counts;
-- per-session token totals;
+- per-session tokens for the device work alone (the calls that issued a device command and the
+  calls that read its output), next to the whole-session totals;
+- sessions driven by raw screenshots with no tree command at all;
 - taps on risky labels.
 
 It never records typed text, screenshots or screen contents.
@@ -234,7 +253,7 @@ every hook runs twice and the metrics double-count.
 ## Development
 
 ```
-tools/check.sh                      # lint, hook smoke tests, ui-audit tests, leak scan
+tools/check.sh                      # lint, hook smoke tests, unit tests + coverage floor, leak scan
 claude plugin validate . --strict
 claude --plugin-dir .               # try local changes without installing
 ```

@@ -15,9 +15,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install shellcheck (advisory)
-        if: runner.os == 'Linux'
-        run: sudo apt-get install -y shellcheck
+      - name: Install shellcheck
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y shellcheck; else brew install shellcheck; fi
       - name: Lint, hook smoke tests, leak scan
         run: tools/check.sh
       - uses: actions/setup-node@v4
