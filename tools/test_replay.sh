@@ -12,7 +12,7 @@ PATH="$root/tools/stubs:$PATH"
 export PATH
 export STUB_LOG="$tmp/stub.log"
 export STUB_REPLAY_COPY="$tmp/replayed.ad"
-unset MOBILE_SERIAL MOBILE_UDID MOBILE_POPUP_SELECTORS MOBILE_REPLAY_TIMEOUT_MS STUB_ALERT STUB_EXISTS STUB_REPLAY
+unset MOBILE_SERIAL MOBILE_UDID MOBILE_POPUP_SELECTORS MOBILE_REPLAY_TIMEOUT_MS STUB_ALERT STUB_EXISTS STUB_REPLAY STUB_OPEN
 
 fails=0
 expect() { # <name> <command…>: ok when the command succeeds
@@ -106,6 +106,22 @@ expect "timeout: the line starts with DIVERGED replay and gives the limit" \
   has "$out" "DIVERGED replay add-item.android.ad (6 steps) — timed out after 300 s, no step named."
 expect "timeout: it warns that the steps so far have run" has "$out" "check the screen and the data before repeating"
 expect "timeout: it does not claim the report names the step" eval '! grep -q "names the step" <<<"$out"'
+
+# (b3) app cannot be opened (device held by another folder's session)
+run STUB_OPEN=in_use "$flow" android
+first="$(printf '%s\n' "$out" | head -1)"
+expect "no launch: exit 1" [ "$rc" -eq 1 ]
+expect "no launch: first line says DIVERGED and that no step ran" \
+  [ "$first" == "DIVERGED replay add-item.android.ad (6 steps) — the app could not be opened, no step ran:" ]
+expect "no launch: the error line is passed through" has "$out" "Error (DEVICE_IN_USE): Device is already in use"
+expect "no launch: the hint with the close command is passed through" \
+  has "$out" "Run agent-device close --session cwd:0123abcd:android"
+expect "no launch: diagnostic id and log lines are dropped" eval '! grep -qE "^Diagnostic(s Log| ID):" <<<"$out"'
+expect "no launch: replay is never called" eval '! grep -q "^replay " "$STUB_LOG"'
+expect "no launch: the other session is not closed for the user" \
+  eval '! grep -q "^close --session" "$STUB_LOG"'
+expect "no launch: the text does not say the report names the step" eval '! grep -q "names the step" <<<"$out"'
+expect "no launch: the original flow file is unchanged" cmp -s "$flow" "$tmp/pristine.ad"
 
 # (c) launch popups
 run STUB_EXISTS="$close_sel" "$flow" android

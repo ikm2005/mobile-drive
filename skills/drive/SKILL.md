@@ -64,8 +64,8 @@ If one matches the task:
 
 Run `replay.sh` straight away; it is one call. Don't `Read` the flow file and re-type its steps by
 hand, because that costs a full walk. The script:
-1. closes a stale session;
-2. relaunches the app and waits for the screen to settle;
+1. closes a stale session from this folder;
+2. relaunches the app and waits for the screen to settle (if it cannot be opened, nothing is replayed);
 3. dismisses launch popups (a system alert, plus the buttons in `MOBILE_POPUP_SELECTORS`);
 4. replays the flow.
 
@@ -79,6 +79,11 @@ spend calls re-proving it.
 - `DIVERGED … timed out` → the replay hit its time limit and no step is named. The steps before the
   limit have run, and a flow that creates data may already have created it. Take one snapshot and
   check the data before repeating anything. For a long flow, set `MOBILE_REPLAY_TIMEOUT_MS`.
+
+- `DIVERGED … the app could not be opened, no step ran` → the flow is not at fault and nothing was
+  replayed. The error says why; for `DEVICE_IN_USE` the hint names a session held from another
+  folder. Release it with the command in the hint only if that session is not in use, then run
+  `replay.sh` again.
 
 ## 2. Walk it (no matching flow)
 

@@ -11,6 +11,7 @@
 #   STUB_REPLAY=diverge         `replay` prints $STUB_REPLAY_REPORT (default fixture) and exits 1
 #   STUB_REPLAY=timeout         `replay` prints the daemon's time-limit error and exits 1
 #   STUB_REPLAY_COPY=<file>     `replay <flow>` copies the flow it was given here
+#   STUB_OPEN=in_use            `open` prints the DEVICE_IN_USE error and hint and exits 1
 #   STUB_ALERT=1                `alert get` reports an alert until `alert dismiss`
 #   STUB_EXISTS=<lines>         selectors that `is exists` finds (one per line) until each is pressed
 # State between calls (dismissed alert, pressed selectors) lives next to the log: $STUB_LOG.state/.
@@ -40,6 +41,15 @@ case "$cmd" in
   diff)
     same='{"success": true, "data": {"mismatchPercentage": 0, "dimensionMismatch": false}}'
     printf '%s\n' "${STUB_DIFF_JSON:-$same}"
+    exit 0 ;;
+  open)
+    if [[ "${STUB_OPEN:-}" == in_use ]]; then
+      echo 'Error (DEVICE_IN_USE): Device is already in use by workspace session "cwd:0123abcd:android"'
+      echo 'Hint: Session "cwd:0123abcd:android" belongs to another workspace. Run agent-device close --session cwd:0123abcd:android to release this device from that workspace.'
+      echo "Diagnostic ID: stub-0001"
+      echo "Diagnostics Log: /tmp/stub-diagnostics.log"
+      exit 1
+    fi
     exit 0 ;;
   replay)
     [[ -n "${STUB_REPLAY_COPY:-}" && -f "${1:-}" ]] && cp "$1" "$STUB_REPLAY_COPY"

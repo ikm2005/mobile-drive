@@ -11,8 +11,9 @@ when there is no project folder). One `.ad` script per task and platform: `<task
 ```
 
 `replay.sh`:
-1. closes a stale session;
-2. relaunches the app and waits for it to settle;
+1. closes a stale session from this folder;
+2. relaunches the app and waits for it to settle (if it cannot be opened, nothing is replayed:
+   the line says `the app could not be opened, no step ran`, with agent-device's error and hint);
 3. dismisses launch popups (a system alert, plus the buttons in `MOBILE_POPUP_SELECTORS`);
 4. replays attached to the running app, with a time limit of `MOBILE_REPLAY_TIMEOUT_MS`
    (default 300000 ms; agent-device's own default of 90 s is too short for a 30-step Android flow);

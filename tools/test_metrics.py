@@ -178,6 +178,12 @@ evs = bash("replay3", "bash scripts/replay.sh add-item.android.ad", stdout="DIVE
            error="Error (DEVICE_NOT_FOUND) no device")
 r = [x for x in evs if x["kind"] == "replay"]
 expect("replay.sh error before any step", len(r) == 1 and r[0]["error"] == "DEVICE_NOT_FOUND" and r[0]["step"] is None, r)
+evs = bash("replay3b", "bash scripts/replay.sh add-item.android.ad",
+           stdout="DIVERGED replay add-item.android.ad (6 steps) — the app could not be opened, no step ran:\n"
+                  "Error (DEVICE_IN_USE): Device is already in use by workspace session\nHint: close it\n")
+r = [x for x in evs if x["kind"] == "replay"]
+expect("replay.sh app could not be opened", len(r) == 1 and r[0]["error"] == "DEVICE_IN_USE" and r[0]["step"] is None and
+       r[0]["outcome"] == "DIVERGED", r)
 expect("replay.sh without a result line records nothing", bash("replay4", "bash scripts/replay.sh x.ad", stdout="") == [])
 evs = bash("replay5", "agent-device replay flows/x.ad", stdout="Replay failed at step 2 (fill @e1): stale ref")
 expect("agent-device replay DIVERGED", [(x.get("outcome"), x.get("step")) for x in ad(evs)] == [("DIVERGED", 2)], evs)

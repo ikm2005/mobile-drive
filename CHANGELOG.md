@@ -3,6 +3,16 @@
 All notable changes to this plugin. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/). Pre-1.0: the evidence comes from one app.
 
+## [0.2.2] — 2026-11-14
+
+### Fixed
+- `replay.sh` no longer replays after a failed launch. A device held by a session from another
+  folder made the preflight `open` fail with `DEVICE_IN_USE`; the failure was discarded and the flow
+  ran against whatever screen the app was on, so the report blamed a flow step that was fine. Any
+  failed `open` (device in use, device not found, app not installed) now prints
+  `DIVERGED replay <flow> (<n> steps) — the app could not be opened, no step ran:` with agent-device's
+  error and hint, and exits 1. The other folder's session is not closed for you: it may be in use.
+
 ## [0.2.1] — 2026-11-14
 
 Driven by a review of three weeks of real use: the one device session since 0.2.0 was driven by raw

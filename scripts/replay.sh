@@ -4,10 +4,13 @@
 #   replay.sh <flow.ad> android [serial]     (serial defaults to $MOBILE_SERIAL or emulator-5554)
 #   replay.sh <flow.ad> ios [udid]           (udid defaults to $MOBILE_UDID or the booted simulator)
 #
-# 1. closes a stale session left by an earlier run (it would lock the device);
+# 1. closes a stale session left by an earlier run from this same folder (it would lock the device;
+#    a session held by another folder is not closed — see 2);
 # 2. preflight: relaunches the app, waits until the screen is stable, and dismisses launch popups
 #    (system alert, plus any button in $MOBILE_POPUP_SELECTORS — default a "Close" button), which
-#    otherwise break a replay at a random step;
+#    otherwise break a replay at a random step. If the app cannot be opened (device held by another
+#    folder's session, device not found, app not installed) nothing is replayed: it prints
+#    `DIVERGED … the app could not be opened, no step ran:` with agent-device's error and exits 1;
 # 3. replays the flow attached to the running app (its first `open … --relaunch` loses --relaunch),
 #    with a time limit of $MOBILE_REPLAY_TIMEOUT_MS (default 300000 ms).
 # Exit 0 = PASS, 1 = divergence or timeout (report printed; repair per `agent-device help scripting`),
@@ -31,11 +34,18 @@ app=$(grep -m1 -oE '^open "[^"]+"' "$flow" | cut -d'"' -f2)
 popups="${MOBILE_POPUP_SELECTORS:-role=\"button\" label=\"Close\"}"
 
 agent-device close --platform "$platform" >/dev/null 2>&1 || true
+steps=$(grep -cvE '^(#|context|[[:space:]]*$)' "$flow")
 
 # Preflight — none of this is recorded or part of the flow.
 dismissed=""
 if [[ -n "$app" ]]; then
-  agent-device open "$app" --relaunch "${target[@]}" >/dev/null 2>&1
+  if ! open_out=$(agent-device open "$app" --relaunch "${target[@]}" 2>&1); then
+    # Replaying after a failed launch would run the flow against whatever screen the app was on.
+    # The other folder's session is not closed here: it may be in use. The hint names the command.
+    echo "DIVERGED replay $(basename "$flow") ($steps steps) — the app could not be opened, no step ran:"
+    grep -vE '^(Diagnostic ID|Diagnostics Log):' <<<"$open_out" | head -30
+    exit 1
+  fi
   for _ in 1 2; do
     agent-device wait stable 3000 20000 "${target[@]}" >/dev/null 2>&1
     hit=""
@@ -63,7 +73,7 @@ awk '!done && /^open "/ { sub(/ --relaunch/, ""); done = 1 } { print }' "$flow" 
 # needs more. Set MOBILE_REPLAY_TIMEOUT_MS per project for longer flows.
 timeout_ms="${MOBILE_REPLAY_TIMEOUT_MS:-300000}"
 out=$(agent-device replay "$attached" --timeout "$timeout_ms" "${target[@]}" 2>&1); rc=$?
-note="$(grep -cvE '^(#|context|[[:space:]]*$)' "$flow") steps${dismissed:+, dismissed $dismissed first}"
+note="$steps steps${dismissed:+, dismissed $dismissed first}"
 if [[ $rc -eq 0 ]]; then
   echo "PASS replay $(basename "$flow") ($note)"; exit 0
 fi
