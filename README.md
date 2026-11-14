@@ -133,6 +133,11 @@ If the app opens with a paywall or onboarding sheet whose dismiss button is not 
 tell the replay preflight how to close it, one selector per line:
 `export MOBILE_POPUP_SELECTORS=$'label="Skip"\nid="close_button"'`.
 
+If a replay prints `DIVERGED … the app could not be opened, no step ran`, the flow is not at fault.
+The usual cause is a device held by a session started from another folder (`DEVICE_IN_USE`). The
+hint in the output names the `agent-device close --session …` command; run it only if that session
+is not in use.
+
 ## Checking screens (`mobile-drive:ui-check`)
 
 Ask "does the Items screen match iOS?" or "is anything under the notch on this screen?".
@@ -182,7 +187,7 @@ CI golden images, use Paparazzi, Roborazzi or swift-snapshot-testing.
 | Sonnet executor that returns PASS/FAIL in ≤ 20 lines | agent `mobile-drive:mobile-runner` |
 | Screen checks against a design: geometry, safe area, clipping, tap size, eyes on crops | skill `mobile-drive:ui-check`, `scripts/ui-audit.py`, `scripts/figma-spec.py` |
 | Haiku crop inspector that answers PASS/FAIL/UNSURE per item | agent `mobile-drive:ui-inspector` |
-| One-call replay with stale-session cleanup and popup preflight | `scripts/replay.sh` |
+| One-call replay with stale-session cleanup and popup preflight; it replays nothing if the app cannot be opened | `scripts/replay.sh` |
 | Reminder when an agent screenshots or pixel-taps instead of reading the tree: at the 1st, 4th and 12th raw call of a session. It names the skill and the runner, and never blocks | `PostToolUse` hook |
 | Zero-token metrics collector | hooks on `PostToolUse`, `PostToolUseFailure`, `SubagentStop`, `SessionEnd` |
 | Machine setup, project setup, monthly retrospective | `/mobile-drive:setup`, `/mobile-drive:init`, `/mobile-drive:retro` |
