@@ -9,7 +9,7 @@
 #
 # `claude plugin validate . --strict` is run separately (CI installs the CLI for it).
 set -uo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
+cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 
 terms=""; release=0
 while [[ $# -gt 0 ]]; do
